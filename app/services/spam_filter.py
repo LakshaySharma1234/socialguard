@@ -1,9 +1,41 @@
 import joblib
 import re
+from pathlib import Path
 
+from app.core.config import get_settings
 from app.utils.similarity import is_repeated
 
-model = joblib.load("app/ml/spam_model.pkl")
+
+SUSPICIOUS_KEYWORDS = [
+    "telegram",
+    "whatsapp",
+    "contact me",
+    "investment advisor",
+    "dm me",
+    "guaranteed profit",
+    "trading bot",
+]
+
+_model = None
+
+
+def _get_model():
+    global _model
+    if _model is not None:
+        return _model
+
+    model_path = Path(get_settings()["model_path"])
+    if not model_path.exists():
+        return None
+
+    _model = joblib.load(model_path)
+    return _model
+
+
+def reload_model():
+    global _model
+    _model = None
+    return _get_model()
 
 
 def detect_links(text):
@@ -28,33 +60,33 @@ def detect_spaced_spam(text):
 
 
 def detect_spam(comment: str):
-
     text = comment.lower()
-
     score = 0
     reasons = []
 
-    # link detection
     if detect_links(text):
         score += 1
         reasons.append("link detected")
 
-    # unicode / spaced detection
     if detect_spaced_spam(text):
         score += 1
-        reasons.append("unicode spam")
+        reasons.append("spaced keyword spam")
 
-    # repeated comment detection
+    if any(keyword in text for keyword in SUSPICIOUS_KEYWORDS):
+        score += 1
+        reasons.append("suspicious keyword")
+
     if is_repeated(text):
         score += 1
         reasons.append("repeated comment")
 
-    # ML classifier
-    ml_probability = model.predict_proba([text])[0][1]
-
-    if ml_probability > 0.7:
-        score += 1
-        reasons.append("ml spam prediction")
+    ml_probability = 0.0
+    model = _get_model()
+    if model is not None:
+        ml_probability = float(model.predict_proba([text])[0][1])
+        if ml_probability > 0.7:
+            score += 1
+            reasons.append("ml spam prediction")
 
     spam = score >= 1
 

@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from app.api.routes import router
-from app.core.database import Base, engine
+from app.core.database import init_database
 
-Base.metadata.create_all(bind=engine)
+init_database()
 
 app = FastAPI(
     title="SocialGuard API",
